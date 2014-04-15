@@ -7,156 +7,141 @@
     <script src="http://code.jquery.com/jquery-2.1.0.min.js"></script>
     <script src="https://api.trello.com/1/client.js?key=1c92bd6f23a228cfed38a293c100aa8e"></script>
     <script src="http://d3js.org/d3.v3.min.js" charset="utf-8"></script>
+    <script src="gantrello.js" charset="utf-8" type="text/javascript"></script>
 </head>
 <body>
+    <style>
+        .axis {
+            shape-rendering: crispEdges;
+        }
 
+        .x.axis line {
+            stroke: #898989;
+        }
+
+        .x.axis path {
+            display: none;
+        }
+
+        .y.axis line, .y.axis path {
+            fill: none;
+            //stroke: #000;
+        }
+    </style>
     <select id="board-list">
     </select>
 
     <script type="text/javascript">
 
-        (function($, d3){
+        (function(gt, $, d3) {
 
-
-            $(function(){
-                var auth = $.Deferred(function(d){
-                    Trello.authorize({
-                        type : "popup",
-                        name : "Gantrello",
-                        expiration : "never",
-                        success : function(){
-                            d.resolve();
-                        },
-                        error : function(err){
-                            d.reject(err);
-                        }
+            $(function () {
+                gt.auth()
+                    .then(gt.whoAmI)
+                    .then(function (me) {
+                        return gt.getMyBoard(me.id)
+                    }).then(function (boards) {
+                        //console.log(boards);
+                        var $options = boards.map(function (b) {
+                            return $('<option value="' + b.id + '">' + b.name + '</option>');
+                        });
+                        $options.forEach(function (o) {
+                            $('#board-list').append(o);
+                        });
                     });
-                });
-
-                var whoAmI = $.Deferred(function(d){
-                    Trello.rest('GET','/members/me', function(me){
-                        d.resolve(me);
-                    }, function(err){
-                        d.reject(err);
-                    })
-                });
-
-
-                $.when(whoAmI).then(function(me){
-                    return getBoard(me.id)
-                }).then(function(boards){
-                    //console.log(boards);
-                    var $options = boards.map(function(b){
-                        return $('<option value="'+b.id+'">'+b.name+'</option>');
-                    });
-                    $options.forEach(function(o){
-                        $('#board-list').append(o);
-                    });
-                });
-
-                var getBoard = function(memberId){
-                    return $.Deferred(function(d){
-                        Trello.rest('GET', 'members/'+memberId+'/boards', function(boards){
-                            d.resolve(boards);
-                        }, function(err){
-                            d.reject(err);
-                            alert('Invalid member id', err);
-                        })
-                    })
-                };
-
             });
 
-            function par(array) {
-                var seed = $.Deferred().resolve([]);
-                if (!array || array.length == 0) return seed;
-                else {
-                    return array.map(
-                            function(p) {
-                                return p();
-                            }).reduce(function(state, promise) {
-                                return state.pipe(function(input) {
-                                    return promise.pipe(function(i) {
-                                        return input.concat(i);
-                                    });
-                                });
-                            }, seed.promise());
-                }
-            }
 
-            var getCardActions = function(cardId){
-                return $.Deferred(function(d){
-                    Trello.rest('GET', '/cards/'+cardId+'/actions?filter=updateCard:idList', function(actions){
-                        d.resolve(actions);
-                    }, function(err){
-                        d.reject(err);
-                    })
-                }).promise;
-            };
-
-            $(document).on('change', '#board-list', function(event){
+            $(document).on('change', '#board-list', function (event) {
                 var boardId = $(event.currentTarget).val();
 
-                var getBoard = $.Deferred(function(d) {
-                    Trello.rest('GET', '/boards/'+ boardId + '?cards=open', function(boardWithCards){
-                        d.resolve(boardWithCards);
-                    }, function(err){
-                        d.reject(err);
-                    })
-                });
+                gt.getBoard(boardId).then(function (boardWithCards) {
 
-                $.when(getBoard).then(function(boardWithCards){
+                    gt.getCardsActions(boardWithCards.cards.map(function (c) {
+                        return c.id
+                    }))
+                        .then(function (cardsActions) {
 
-                    par(boardWithCards.cards.map(function(card){
-                        return getCardActions(card.id);
-                    })).then(function(cardsActions){
+                            console.log("Actions", cardsActions.length);
 
-                        console.log("Actions", cardsActions.length);
-/*
-                       { "id": "533c1e7928dbc21630bfc650", "idMemberCreator": "5072d08f8f914caa6aa72556",
-                         "data": {
-                            "listAfter": {"name": "Done", "id": "52fbad440d174fda41703f1c"},
-                            "listBefore": {"name": "Bugs / minor improvements", "id": "53375607a3b9cefc2af7ce7d"},
-                            "board": {"shortLink": "czGb187x", "name": "BandSquare Pledge", "id": "52fbad440d174fda41703f19"},
-                            "card": {"shortLink": "fWfsjMN8", "idShort": 12, "name": "Default band image when no image available for the band on lastFM", "id": "53375679b255b57739d203df", "idList": "52fbad440d174fda41703f1c"}, "old": {"idList": "53375607a3b9cefc2af7ce7d"}},
-                            "type": "updateCard",
-                            "date": "2014-04-02T14:28:09.520Z",
-                            "memberCreator": {"id": "5072d08f8f914caa6aa72556", "avatarHash": "853add8ce9dfc46a80ba989cfd383a52", "fullName": "Antoine Labbe", "initials": "AL", "username": "antoinelabbe"}
-                       }
-*/
+                            /*
+                             { "id": "533c1e7928dbc21630bfc650", "idMemberCreator": "5072d08f8f914caa6aa72556",
+                             "data": {
+                             "listAfter": {"name": "Done", "id": "52fbad440d174fda41703f1c"},
+                             "listBefore": {"name": "Bugs / minor improvements", "id": "53375607a3b9cefc2af7ce7d"},
+                             "board": {"shortLink": "czGb187x", "name": "BandSquare Pledge", "id": "52fbad440d174fda41703f19"},
+                             "card": {"shortLink": "fWfsjMN8", "idShort": 12, "name": "Default band image when no image available for the band on lastFM", "id": "53375679b255b57739d203df", "idList": "52fbad440d174fda41703f1c"}, "old": {"idList": "53375607a3b9cefc2af7ce7d"}},
+                             "type": "updateCard",
+                             "date": "2014-04-02T14:28:09.520Z",
+                             "memberCreator": {"id": "5072d08f8f914caa6aa72556", "avatarHash": "853add8ce9dfc46a80ba989cfd383a52", "fullName": "Antoine Labbe", "initials": "AL", "username": "antoinelabbe"}
+                             }
+                             */
 
-                        var filtered = cardsActions.filter(function(a){
-                            var after = a.data.listAfter.name;
-                            var before = a.data.listBefore.name;
-                            return after == "Done" || after == "Doing" || before == "Done" || before == "Doing";
+                            var filtered = cardsActions.filter(function (a) {
+                                var after = a.data.listAfter.name;
+                                var before = a.data.listBefore.name;
+                                return  (after == "Doing" && before == "To Do") || (before == "Doing" && after == "Done");
+                            });
+
+                            console.log("Actions filtered", filtered.length);
+
+                            /* nest by card id so we can draw per line */
+                            var nestedByCardId = d3.nest()
+                                    .key(function (i) {
+                                        return i.data.card.id
+                                    })
+                                    .rollup(function (i) {
+                                        return i.map(function (e) {
+                                            return {data: e.data, date: new Date(Date.parse(e.date))};
+                                        });
+                                    })
+                                    .entries(filtered);
+
+                            console.log(nestedByCardId);
+
+                            var arranged = nestedByCardId.map(function(item) {
+
+                                var asc = function(a, b){
+                                    console.log(a, b);
+                                    return a.date.getTime() - b.date.getTime()
+                                };
+
+                                //var actionsSorted = item.values;
+
+                                var enter = item.values.filter(function(a){
+                                   return a.data.listBefore.name == "To Do" && a.data.listAfter.name == "Doing"
+                                }).sort(asc);
+
+                                var end = item.values.filter(function(a){
+                                    return a.data.listBefore.name == "Doing" && a.data.listAfter.name == "Done"
+                                }).sort(asc);
+
+                                var result = [];
+                                for (var i = 0; i < enter.length; i++) {
+                                    var e = { start: enter[i].date };
+                                    if (end[i]) e.end = end[i].date;
+                                    result.push(e);
+                                }
+
+                                return {
+                                    card : item.values[0].data.card,
+                                    entries : result
+                                };
+
+                            });
+
+                            console.log(arranged);
+
                         });
-
-                        console.log("Actions filterd", filtered.length, filtered);
-
-                        var res = d3.nest()
-                                .key(function(i){
-                                    return i.data.card.id
-                                })
-                                .rollup(function(i){
-                                    return i.map(function(e){
-                                        return {data : e.data, date: e.date};
-;                                    });
-                                })
-                                .entries(filtered);
-
-                        console.log("Cards", res.length);
-                        console.log(res);
-
-
-
-                    });
                 })
-            })
+            });
+        }(gt, jQuery, d3));
 
-        }(jQuery, d3))
+
+
+
 
     </script>
-
 
 </body>
 </html>
